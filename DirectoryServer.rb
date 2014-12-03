@@ -42,11 +42,12 @@ class DirectoryServer
       end
     end
     @directories[:ser_ports].each do |other_server, fs_port|
+      puts "TARA:#{@directories[:ser_ports]}"
       if($server_ip == other_server)
         $server_port = fs_port
       end
     end
-    client.puts "SERVER:#{$server_ip} PORT:#{$port} FILENAME:#{$server_fn}"
+    client.puts "SERVER:#{$server_ip} PORT:#{$server_port} FILENAME:#{$server_fn}"
   end
 end
 

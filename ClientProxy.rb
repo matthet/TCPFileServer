@@ -1,11 +1,20 @@
+
 require 'thread' 
 require "socket"
 
 class ClientProxy
-  def initialize(size, ip, port, dserver)
+  def initialize(size, ip, port)
     @proxyserver = TCPServer.new(ip, port)
-    #@fileserver = fserver
-    @directoryserver = dserver
+
+    # Open File Server Connection(s)
+    @fs_port = 2632
+    @fs_ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
+    @fileserver0 = TCPSocket.open(@fs_ip, @fs_port)
+
+    # Open Directory Server Connection
+    @ds_port = 2633
+    @ds_ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
+    @directoryserver = TCPSocket.open(@ds_ip, @ds_port)
 
     @size = size
     @jobs = Queue.new
@@ -38,58 +47,70 @@ class ClientProxy
       client.puts "Ready to go...\n"
 	loop do
 	  client.puts "Your request please:\n"
-	  client_request = nil
-          dir_response = nil
-	  listen_client(client, client_request)
-	  listen_dserver(client, dir_response)
-	  client_request.join
-	  dir_response.join
+	  c_request = nil
+	  listen_client(client, c_request)
+	  c_request.join
 	end
       end
     end
   end
 
-  def listen_client(client, client_request)
-    client_request = Thread.new do
+  def listen_client(client, c_request)
+    c_request = Thread.new do
       loop do
         msg = client.gets.chomp
-        fn = msg
-        # while line = client.gets.chomp
-        #  msg << line
-        #end
-        if msg[0..4] == "OPEN:" || msg[0..4] == "READ"
-          @directoryserver.puts("FILENAME:#{fn[5..fn.length-1]}")
-        elsif msg[0..4] == "CLOSE:" || msg[0..4] == "WRITE"
-          @directoryserver.puts("FILENAME:#{fn[6..fn.length-1]}")
+        if msg[0..4] == "OPEN:"
+	  @directoryserver.puts("FILENAME:#{msg[5..msg.length-1]}")
+	  msg = msg[0..4] << " " << client.gets.chomp
+        elsif msg[0..4] == "READ:"
+	  @directoryserver.puts("FILENAME:#{msg[5..msg.length-1]}")
+          msg = msg[0..4] << " " << client.gets.chomp << " " << client.gets.chomp
+        elsif @client_msg[0..4] == "CLOSE:"
+	  #@directoryserver.puts("FILENAME:#{fn[6..fn.length-1]}")
+	elsif @client_msg[0..4] == "WRITE:"
+          #@directoryserver.puts("FILENAME:#{fn[6..fn.length-1]}")
         else
 	  client.puts "ERROR -1:Only OPEN, CLOSE, READ, WRITE operations allowed"
 	end
+	ds_response = nil
+        listen_dserver(msg, client, ds_response)
+        ds_response.join
       end
     end
   end
 
-  def listen_dserver(client, dir_response)
-    dir_response = Thread.new do
+  def listen_dserver(client_msg, client, ds_response)
+    ds_response = Thread.new do
       loop do
-        msg = @directoryserver.gets.chomp
-        puts(msg)
+        msg = @directoryserver.gets.chomp.split(" ")
+        ip = msg[0][7..msg[0].length-1]
+	port = msg[1][5..msg[1].length-1]
+	fn = msg[2][9..msg[2].length-1]
+	if ip == @fs_ip.to_s && port == @fs_port.to_s
+          if client_msg[0..4] == "OPEN:"
+	    client_msg.insert(5,"#{fn}")
+	    @fileserver0.puts(client_msg)
+	  end
+	  fs_response = nil
+	  listen_fserver(client, fs_response)
+          fs_response.join
+	end
+      end
+    end
+  end
+
+  def listen_fserver(client, fs_response)
+    fs_response = Thread.new do
+      loop do
+	msg = @fileserver0.gets.chomp
+	client.puts(msg)
       end
     end
   end
 end
 
-# Open File Server Connection
-#fs_port = 2632
-#fs_ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
-#fs = TCPSocket.open(fs_ip, fs_port)
-
-# Open Directory Server Connection
-ds_port = 2633
-ds_ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
-ds = TCPSocket.open(ds_ip, ds_port)
-
 # Initialise the Proxy Server
 port = 2631
 ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
-ClientProxy.new(10, ip, port, ds)
+ClientProxy.new(10, ip, port)
 

@@ -42,8 +42,9 @@ class FileServer
       schedule(@fileserver.accept) do |client|
         loop do
           request = client.gets.chomp
+	  puts request
           if request[0..4] == "OPEN:"
-	    open_request(request[5..request.length-1], client)
+	    open_request(request, client)
 	  elsif request[0..5] == "CLOSE:"
 	    close_request(request[6..request.length-1], client)
 	  elsif request[0..4] == "READ:"
@@ -59,12 +60,13 @@ class FileServer
   end
   
   # Client has requested to open a file
-  def open_request(filename, client)
-    more_info = client.gets.chomp
-    is_new = more_info[7..more_info.length-1].to_i
+  def open_request(request, client)
+    split_request = request.split(" ")
+    filename = split_request[0][5..split_request[0].length]
+    is_new = split_request[1][7..split_request[1].length]
     if is_new == 1 #create new file request
-      if File.exist?(filename)
-        client.puts @error0
+      if File.exist?(filename) 
+	client.puts @error0
       else
         File.open(filename, "w"){ |somefile| somefile.puts "Hello new file!"}
         client.puts "\nOK:#{filename}\n\n"
@@ -128,6 +130,5 @@ end
 # Initialise the File Server
 fs_port = 2632
 ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
-puts ip
 FileServer.new(10, ip, fs_port)
 
