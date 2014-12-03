@@ -3,9 +3,7 @@ require "socket"
 
 class FileServer
   def initialize(size, ip, port)
-    @port = port
-    @ip = ip
-    @fileserver = TCPServer.new(@ip, @port)
+    @fileserver = TCPServer.new(ip, port)
 
     @size = size
     @jobs = Queue.new
@@ -127,8 +125,9 @@ class FileServer
   end
 end
 
-# Initialise the Server
+# Initialise the File Server
 fs_port = 2632
 ip = Socket.ip_address_list.find { |ai| ai.ipv4? && !ai.ipv4_loopback? }.ip_address
+puts ip
 FileServer.new(10, ip, fs_port)
 
