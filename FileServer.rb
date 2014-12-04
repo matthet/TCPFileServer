@@ -46,11 +46,11 @@ class FileServer
           if request[0..4] == "OPEN:"
 	    open_request(request, client)
 	  elsif request[0..5] == "CLOSE:"
-	    close_request(request[6..request.length-1], client)
+	    close_request(request[6..request.length-1].to_s, client)
 	  elsif request[0..4] == "READ:"
-	    read_request(request[5..request.length-1], client)
+	    read_request(request, client)
 	  elsif request[0..5] == "WRITE:"
-	    write_request(request[6..request.length-1], client)
+	    write_request(request, client)
 	  end
 	end
       end
@@ -85,17 +85,19 @@ class FileServer
   def close_request(filename, client)
     if File.exist?(filename)
       client.puts "\nOK:#{filename}\n\n"
-    else client.puts @error1
+    else 
+      client.puts @error1
     end
   end
 
   # Client has requested to read a file
-  def read_request(filename, client)
+  def read_request(request, client)
+    split_request = request.split(" ")
+    filename = split_request[0][5..split_request[0].length]
+    start_n = split_request[1][6..split_request[1].length].to_i
+    len_n = split_request[2][7..split_request[2].length].to_i
+    puts split_request
     if File.exist?(filename)
-      start_pos = client.gets.chomp
-      start_n = start_pos[6..start_pos.length-1].to_i
-      len = client.gets.chomp
-      len_n = len[7..len.length-1].to_i
       file_size = File.size(filename)
       if start_n >= file_size || len_n > file_size
         client.puts "#{@error2} (#{file_size})\n\n"
@@ -108,11 +110,15 @@ class FileServer
   end
 
   # Client has requested to write to a file
-  def write_request(filename, client)
+  def write_request(request, client)
+    split_request = request.split(" ")
+    puts split_request
+    filename = split_request[0][6..split_request[0].length]
+    start_n = split_request[1][6..split_request[1].length].to_i
+    contents = split_request[2]
+    puts contents
     if File.exist?(filename)
-      start_pos = client.gets.chomp
-      start_n = start_pos[6..start_pos.length-1].to_i
-      IO.binwrite(filename, client.gets.chomp, start_n)
+      IO.binwrite(filename, contents, start_n) #need to fix this!
       client.puts "\nOK:#{filename}\nSTART:#{start_n}\n\n"
     else client.puts @error1
     end

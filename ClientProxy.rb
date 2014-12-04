@@ -1,4 +1,3 @@
-
 require 'thread' 
 require "socket"
 
@@ -45,65 +44,78 @@ class ClientProxy
     loop do
       schedule(@proxyserver.accept) do |client|
       client.puts "Ready to go...\n"
+	@client = client
 	loop do
-	  client.puts "Your request please:\n"
-	  c_request = nil
-	  listen_client(client, c_request)
-	  c_request.join
+	  @client_msg = ""
+	  @client_fn = ""
+	  @server_fn = ""
+	  @c_request = nil
+    	  @ds_response = nil
+    	  @fs_response = nil	  
+	  listen_client
+	  listen_dserver
+	  listen_fserver
+	  @c_request.join
+          @ds_response.join
+	  @fs_response.join
 	end
       end
     end
   end
 
-  def listen_client(client, c_request)
-    c_request = Thread.new do
+  def listen_client
+    @c_request = Thread.new do
       loop do
-        msg = client.gets.chomp
-        if msg[0..4] == "OPEN:"
-	  @directoryserver.puts("FILENAME:#{msg[5..msg.length-1]}")
-	  msg = msg[0..4] << " " << client.gets.chomp
-        elsif msg[0..4] == "READ:"
-	  @directoryserver.puts("FILENAME:#{msg[5..msg.length-1]}")
-          msg = msg[0..4] << " " << client.gets.chomp << " " << client.gets.chomp
-        elsif @client_msg[0..4] == "CLOSE:"
-	  #@directoryserver.puts("FILENAME:#{fn[6..fn.length-1]}")
-	elsif @client_msg[0..4] == "WRITE:"
-          #@directoryserver.puts("FILENAME:#{fn[6..fn.length-1]}")
+        @client_msg = @client.gets.chomp
+        if @client_msg[0..4] == "OPEN:"
+	  @client_fn = @client_msg[5..@client_msg.length-1]
+	  @client_msg = @client_msg[0..4] << " " << @client.gets.chomp
+	  puts @client_msg
+	  @directoryserver.puts("FILENAME:#{@client_fn}")
+        elsif @client_msg[0..4] == "READ:"
+	  @client_fn = @client_msg[5..@client_msg.length-1]
+          @client_msg = @client_msg[0..4] << " " << @client.gets.chomp << " " << @client.gets.chomp
+	  @directoryserver.puts("FILENAME:#{@client_fn}")
+        elsif @client_msg[0..5] == "CLOSE:"
+	  @client_fn = @client_msg[6..@client_msg.length-1]
+	  @client_msg = @client_msg[0..5]
+	  @directoryserver.puts("FILENAME:#{@client_fn}")
+	elsif @client_msg[0..5] == "WRITE:"
+	  @client_fn = @client_msg[6..@client_msg.length-1]
+	  @client_msg = @client_msg[0..5] << " " << @client.gets.chomp << " " << @client.gets.chomp
+	  @directoryserver.puts("FILENAME:#{@client_fn}")
         else
-	  client.puts "ERROR -1:Only OPEN, CLOSE, READ, WRITE operations allowed"
+	  @client.puts "ERROR -1:Only OPEN, CLOSE, READ, WRITE operations allowed"
 	end
-	ds_response = nil
-        listen_dserver(msg, client, ds_response)
-        ds_response.join
       end
     end
   end
 
-  def listen_dserver(client_msg, client, ds_response)
-    ds_response = Thread.new do
+  def listen_dserver
+    @ds_response = Thread.new do
       loop do
         msg = @directoryserver.gets.chomp.split(" ")
         ip = msg[0][7..msg[0].length-1]
 	port = msg[1][5..msg[1].length-1]
-	fn = msg[2][9..msg[2].length-1]
+	@server_fn = msg[2][9..msg[2].length-1]
 	if ip == @fs_ip.to_s && port == @fs_port.to_s
-          if client_msg[0..4] == "OPEN:"
-	    client_msg.insert(5,"#{fn}")
-	    @fileserver0.puts(client_msg)
+          if @client_msg[0..4] == "OPEN:" || @client_msg[0..4] == "READ:"
+	    @client_msg.insert(5,"#{@server_fn}")
+	  else
+	    @client_msg.insert(6,"#{@server_fn}")
 	  end
-	  fs_response = nil
-	  listen_fserver(client, fs_response)
-          fs_response.join
+	  @fileserver0.puts(@client_msg)
 	end
       end
     end
   end
 
-  def listen_fserver(client, fs_response)
-    fs_response = Thread.new do
+  def listen_fserver
+    @fs_response = Thread.new do
       loop do
 	msg = @fileserver0.gets.chomp
-	client.puts(msg)
+	msg = msg.sub(@server_fn, @client_fn)
+	@client.puts(msg)
       end
     end
   end
